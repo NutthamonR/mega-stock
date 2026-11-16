@@ -129,7 +129,7 @@ table.t tr.click:hover td { background: #faf7f0; }
 .drop { border: 2px dashed #b9cfe0; border-radius: 14px; padding: 28px 16px; text-align: center; background: #f7fafc; cursor: pointer; display: block; }
 .drop:hover { background: #eef4f9; }
 .flex { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
-.field input[type=checkbox], label.lbl input[type=checkbox] { width: 18px; height: 18px; padding: 0; margin: 0; vertical-align: -3px; }
+.field input[type=checkbox], label.lbl input[type=checkbox], .field input[type=radio], label.lbl input[type=radio] { width: 18px; height: 18px; padding: 0; margin: 0; vertical-align: -3px; flex: none; accent-color: #003049; }
 label.lbl { display: flex; align-items: center; gap: 8px; }
 .logout { padding: 8px 12px; border-radius: 9px; border: 1px solid #cfd8d1; background: #fff; color: #46524c; cursor: pointer; font-size: 12.5px; font-weight: 500; }
 .logout:hover { background: #f2f5f1; }
