@@ -200,6 +200,31 @@ function bindRecovery() {
   };
 }
 
+/* member signed in with a temporary password set by the owner — must choose their own before using the system */
+function renderForcePw() {
+  return authShell(`<h1>ตั้งรหัสผ่านของคุณเอง</h1>
+    <div class="info">ผู้ดูแลระบบรีเซ็ตรหัสผ่านให้คุณ และคุณเข้าสู่ระบบด้วยรหัสชั่วคราว — กรุณาตั้งรหัสผ่านใหม่ที่คุณจำได้ก่อนใช้งาน (ใช้ร่วมกับระบบรับของ)</div>${msgHtml()}
+    <form id="fForce" novalidate>
+      <div class="field"><label for="fp_pw">รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)</label><input id="fp_pw" type="password" autocomplete="new-password" required></div>
+      <div class="field"><label for="fp_pw2">ยืนยันรหัสผ่านใหม่</label><input id="fp_pw2" type="password" autocomplete="new-password" required></div>
+      <button class="btn block" type="submit">บันทึกรหัสผ่าน</button></form>
+    <div style="text-align:center;margin-top:18px"><button class="linkbtn" id="fpOut">ออกจากระบบ</button></div>`);
+}
+function bindForcePw() {
+  $('#fpOut').onclick = () => sb.auth.signOut();
+  $('#fForce').onsubmit = async e => {
+    e.preventDefault(); const pw = $('#fp_pw').value;
+    if (pw.length < 8) { S.authMsg = { kind: 'err', text: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร' }; return render(); }
+    if (pw !== $('#fp_pw2').value) { S.authMsg = { kind: 'err', text: 'รหัสผ่านทั้งสองช่องไม่ตรงกัน' }; return render(); }
+    $('#fForce button[type=submit]').disabled = true;
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { S.authMsg = { kind: 'err', text: /same|different from the old/i.test(error.message || '') ? 'รหัสใหม่ต้องไม่ซ้ำกับรหัสชั่วคราว' : errMsg(error) }; return render(); }
+    const { error: e2 } = await sb.from('stock_members').update({ must_change_pw: false }).eq('user_id', S.member.user_id);
+    if (e2) { S.authMsg = { kind: 'err', text: errMsg(e2) }; return render(); }
+    S.member.must_change_pw = false; S.authMsg = null; toast('✓ ตั้งรหัสผ่านใหม่แล้ว'); render();
+  };
+}
+
 function gateShell(inner) {
   return authShell(`${inner}<div style="text-align:center;margin-top:18px"><button class="linkbtn" id="gOut">ออกจากระบบ</button></div>`);
 }
@@ -272,6 +297,7 @@ function render() {
   if (S.recovery && S.session) { app.innerHTML = renderRecovery(); return bindRecovery(); }
   if (!S.session) { app.innerHTML = renderAuth(); return bindAuth(); }
   if (!S.member || S.member.status !== 'approved') { app.innerHTML = renderGate(); return bindGate(); }
+  if (S.member.must_change_pw) { app.innerHTML = renderForcePw(); return bindForcePw(); }
   if (!S.loaded && !S.loading && !S.loadErr) { loadData(); return; }
   const y = window.scrollY;
   app.innerHTML = renderShell(); bindShell();
