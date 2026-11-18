@@ -19,7 +19,8 @@ function monthWindow() {
   const list = []; let [y, m] = ms[0].split('-').map(Number);
   const [ly, lm] = end.split('-').map(Number);
   while (y < ly || (y === ly && m <= lm)) { list.push(`${y}-${String(m).padStart(2, '0')}-01`); m++; if (m > 12) { m = 1; y++; } }
-  return { all: list, complete: list.filter(x => x < cur), partial: list.includes(cur) ? cur : null, stale: lastData < prev, prev, lastData };
+  const pc = S.coverage && S.coverage[prev], prevThrough = pc && pc.through;
+  return { all: list, complete: list.filter(x => x < cur), partial: list.includes(cur) ? cur : null, stale: lastData < prev, prevShort: !!(prevThrough && prevThrough < mEnd(prev)), prevThrough, prev, lastData };
 }
 function computeItem(sku) {
   const st = settings(), W = monthWindow();
@@ -49,6 +50,12 @@ function computeItem(sku) {
     series, avg3, avg6, last, lastMonth, partialV, partialMonth: W.partial, stock, stockAsOf: sk && sk.as_of, months, status, trend, trendColor, need, needPacks };
 }
 function statusPill(s) { const m = STATUS[s]; return `<span class="status" style="background:${m.bg};color:${m.fg}"><span class="dot" style="background:${m.dot};width:7px;height:7px"></span>${m.label}</span>`; }
+/** Which days a month's total covers, from stock_month_coverage. '' when the whole month is covered. */
+function mEnd(m) { const d = new Date(m + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return d.toISOString().slice(0, 10); }
+function covThrough(m) { const c = S.coverage && S.coverage[m]; return c && c.through ? c.through : null; }
+function covShort(m) { const t = covThrough(m); return t && t < mEnd(m) ? `1–${Number(t.slice(8))}` : ''; }
+function covLong(m) { const t = covThrough(m); return t && t < mEnd(m) ? `ข้อมูล 1–${Number(t.slice(8))} ${TH_M[+m.slice(5, 7) - 1]}` : ''; }
+function mLabelCov(m) { const c = covShort(m); return mLabel(m) + (c ? ` (${c})` : ''); }
 function monthsText(it) { return it.months == null ? '—' : it.months >= 99 ? '99+ เดือน' : it.months.toFixed(1) + ' เดือน'; }
 
 VIEWS.overview = {
@@ -60,7 +67,7 @@ VIEWS.overview = {
     const fin = all.filter(x => x.months != null && ['ok', 'warning', 'critical'].includes(x.status));
     const cov = fin.length ? (fin.reduce((a, b) => a + Math.min(b.months, 24), 0) / fin.length).toFixed(1) : '—';
     const W = monthWindow();
-    const lastLbl = W.complete.length ? mLabel(W.complete[W.complete.length - 1]) : '—';
+    const lastLbl = W.complete.length ? mLabelCov(W.complete[W.complete.length - 1]) : '—';
     const qq = ui.q.trim().toLowerCase();
     let rows = all.filter(x => (!qq || [x.code, x.name, x.supplier, x.sku.jera_name].some(v => (v || '').toLowerCase().includes(qq))) &&
       (ui.cat === 'all' || x.category === ui.cat) && (ui.stat === 'all' || x.status === ui.stat));
@@ -89,7 +96,7 @@ VIEWS.overview = {
           <div><div class="small muted">${lastLbl}</div><b>${q2(x.last)}</b></div><div><div class="small muted">เฉลี่ย 3ด.</div><b>${q2(x.avg3)}</b></div><div><div class="small muted">ควรสั่ง</div><b>${x.need > 0 ? q2(Math.ceil(x.need)) : '—'}</b></div></div>
       </button>`).join('') || '<div class="empty">ไม่พบรายการ</div>'}</div>`;
     return `<div class="pagehead"><div><h1>ภาพรวมสต็อก</h1>
-        <div class="sub">สต็อก ณ ${dLabel(S.stockDate)} · ยอดใช้ถึง ${W.lastData ? mLabel(W.lastData < W.prev ? W.lastData : W.prev) : '—'}${W.partial ? ` (เดือน ${mLabel(W.partial)} ยังไม่ครบเดือน ไม่นำมาคิดค่าเฉลี่ย)` : ''}</div>${W.complete.length ? `<div class="sub">ค่าเฉลี่ย 3 เดือน = ${mLabel(W.complete[Math.max(0, W.complete.length - 3)])} – ${mLabel(W.complete[W.complete.length - 1])} · 6 เดือน = ${mLabel(W.complete[Math.max(0, W.complete.length - 6)])} – ${mLabel(W.complete[W.complete.length - 1])}</div>` : ''}</div>
+        <div class="sub">สต็อก ณ ${dLabel(S.stockDate)} · ยอดใช้ถึง ${S.usageThrough ? dLabel(S.usageThrough) : (W.lastData ? mLabel(W.lastData < W.prev ? W.lastData : W.prev) : '—')}${W.partial ? ` (เดือน ${mLabelCov(W.partial)} ยังไม่ครบเดือน ไม่นำมาคิดค่าเฉลี่ย)` : ''}</div>${W.complete.length ? `<div class="sub">ค่าเฉลี่ย 3 เดือน = ${mLabel(W.complete[Math.max(0, W.complete.length - 3)])} – ${mLabel(W.complete[W.complete.length - 1])} · 6 เดือน = ${mLabel(W.complete[Math.max(0, W.complete.length - 6)])} – ${mLabel(W.complete[W.complete.length - 1])}</div>` : ''}</div>
         <div class="flex" style="align-items:center">
           <label class="small muted" for="setWarn">แจ้งเตือนเมื่อพอใช้ต่ำกว่า</label>
           <select id="setWarn" class="input" style="width:auto;padding:7px 10px">${[1, 1.5, 2, 2.5, 3, 4].map(v => `<option value="${v}" ${st.warn == v ? 'selected' : ''}>${v} เดือน</option>`).join('')}</select>
@@ -97,7 +104,7 @@ VIEWS.overview = {
           <select id="setTarget" class="input" style="width:auto;padding:7px 10px">${[3, 4, 5, 6, 8, 10, 12].map(v => `<option value="${v}" ${st.target == v ? 'selected' : ''}>${v} เดือน</option>`).join('')}</select>
           <div class="seg"><button data-view="table" class="${st.view === 'table' ? 'on' : ''}">☰ ตาราง</button><button data-view="cards" class="${st.view === 'cards' ? 'on' : ''}">▦ การ์ด</button></div>
         </div></div>
-      ${W.stale ? `<div class="warnbox">⚠ ยังไม่มียอดใช้เดือน ${mLabel(W.prev)} ในระบบ (ข้อมูลล่าสุดถึง ${mLabel(W.lastData)}) — เดือนที่ไม่มีข้อมูลจะถูกนับเป็น 0 ทำให้ค่าเฉลี่ยต่ำกว่าความจริง ควรนำเข้าไฟล์ล่าสุดในเมนูนำเข้าข้อมูล</div>` : ''}<div class="kpis">${kpi('SKU ที่ติดตาม', all.length, 'รายการที่เปิดติดตามอยู่', '#003049')}${kpi('ต่ำกว่าจุดสั่งซื้อ', crit, `พอใช้ไม่ถึง ${st.warn} เดือน`, '#C1121F', crit ? '#780000' : '')}${kpi('ใกล้หมด', warn, 'ควรวางแผนสั่ง', '#e0982b', warn ? '#8a5410' : '')}${kpi('ครอบคลุมเฉลี่ย', cov + ' ด.', 'จากเฉลี่ยใช้ 3 เดือน', '#669BBC')}</div>
+      ${!W.stale && W.prevShort ? `<div class="warnbox">⚠ ยอดใช้เดือน ${mLabel(W.prev)} มีข้อมูลถึงวันที่ ${dLabel(W.prevThrough)} เท่านั้น — ค่าเฉลี่ยที่รวมเดือนนี้จะต่ำกว่าความจริง ควรนำเข้ารายงานเคลื่อนไหวให้ครบเดือน</div>` : ''}${W.stale ? `<div class="warnbox">⚠ ยังไม่มียอดใช้เดือน ${mLabel(W.prev)} ในระบบ (ข้อมูลล่าสุดถึง ${mLabel(W.lastData)}) — เดือนที่ไม่มีข้อมูลจะถูกนับเป็น 0 ทำให้ค่าเฉลี่ยต่ำกว่าความจริง ควรนำเข้าไฟล์ล่าสุดในเมนูนำเข้าข้อมูล</div>` : ''}<div class="kpis">${kpi('SKU ที่ติดตาม', all.length, 'รายการที่เปิดติดตามอยู่', '#003049')}${kpi('ต่ำกว่าจุดสั่งซื้อ', crit, `พอใช้ไม่ถึง ${st.warn} เดือน`, '#C1121F', crit ? '#780000' : '')}${kpi('ใกล้หมด', warn, 'ควรวางแผนสั่ง', '#e0982b', warn ? '#8a5410' : '')}${kpi('ครอบคลุมเฉลี่ย', cov + ' ด.', 'จากเฉลี่ยใช้ 3 เดือน', '#669BBC')}</div>
       <div class="toolbar">
         <div class="search"><input id="ovQ" type="search" placeholder="ค้นหาชื่อยา / รหัส / บริษัท…" value="${esc(ui.q)}" aria-label="ค้นหา"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">${statChips.map(([k, l]) => `<button class="chip ${ui.stat === k ? 'on' : ''}" data-stat="${k}">${l}</button>`).join('')}</div>
@@ -134,13 +141,13 @@ VIEWS.overview = {
         <a class="btn" href="#promo" id="toPromo">🏷 คำนวณโปรโมชั่น</a></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px">
         ${stat('คงเหลือ', it.stock == null ? '—' : q2(it.stock), it.stockAsOf ? 'ณ ' + dLabel(it.stockAsOf) : 'ไม่มีข้อมูลสต็อก', STATUS[it.status].fg)}
-        ${stat('ใช้ ' + (it.lastMonth ? mLabel(it.lastMonth) : ''), q2(it.last), 'เดือนล่าสุดที่ครบเดือน')}
+        ${stat('ใช้ ' + (it.lastMonth ? mLabel(it.lastMonth) : ''), q2(it.last), it.lastMonth && covLong(it.lastMonth) ? covLong(it.lastMonth) : 'เดือนล่าสุดที่ครบเดือน')}
         ${stat('เฉลี่ย 3 เดือน', q2(it.avg3), (it.unit || 'หน่วย') + '/เดือน')}
         ${stat('เฉลี่ย 6 เดือน', q2(it.avg6), (it.unit || 'หน่วย') + '/เดือน')}
         ${stat('พอใช้อีก', monthsText(it), 'จากเฉลี่ย 3 เดือน', STATUS[it.status].fg)}
         ${stat(`ควรสั่ง (ถึง ${st.target} ด.)`, it.need > 0 ? q2(Math.ceil(it.need)) : '—', it.needPacks ? `≈ ${it.needPacks} ${esc(sku.purchase_unit || '')}` : (it.unit || ''))}
       </div>
-      ${it.partialMonth ? `<div class="info">เดือน ${mLabel(it.partialMonth)} ยังไม่ครบเดือน — ใช้ไปแล้ว ${q2(it.partialV)} ${esc(it.unit)} (ไม่นำมาคิดค่าเฉลี่ย)</div>` : ''}
+      ${it.partialMonth ? `<div class="info">เดือน ${mLabel(it.partialMonth)} ยังไม่ครบเดือน${covThrough(it.partialMonth) ? ` (ข้อมูลถึง ${dLabel(covThrough(it.partialMonth))})` : ''} — ใช้ไปแล้ว ${q2(it.partialV)} ${esc(it.unit)} (ไม่นำมาคิดค่าเฉลี่ย)</div>` : ''}
       <div class="card pad" style="margin-bottom:18px">
         <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px"><div class="title">ยอดใช้รายเดือน</div>
           <div style="display:flex;gap:16px" class="small muted">${years.map(y => `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${yColor(y)}"></span>ปี ${Number(y) + 543}</span>`).join('')}</div></div>
@@ -151,11 +158,11 @@ VIEWS.overview = {
         </div>
         <div id="selBox"></div>
         <div class="small muted" style="margin:4px 0 10px">กดค้างที่แท่งเดือนแรกแล้วลากไปเดือนสุดท้าย (หรือคลิกเดือนแรก แล้ว Shift+คลิกเดือนสุดท้าย) — เลือกในตารางด้านล่างได้เหมือนกัน</div>
-        <div class="scroll" style="padding-bottom:6px"><div class="bars" id="bars" style="user-select:none;touch-action:pan-x">${series.map((x, i) => `<div class="b" data-i="${i}" title="${mLabel(x.month)}: ${q2(x.v)}"><div class="v">${q2(x.v)}</div><div class="col" style="height:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))};${x.month === it.partialMonth ? 'opacity:.45' : ''}"></div></div>`).join('')}</div>
-        <div class="blabels">${series.map(x => `<div>${mLabel(x.month)}${x.month === it.partialMonth ? '*' : ''}</div>`).join('')}</div></div>
+        <div class="scroll" style="padding-bottom:6px"><div class="bars" id="bars" style="user-select:none;touch-action:pan-x">${series.map((x, i) => `<div class="b" data-i="${i}" title="${mLabelCov(x.month)}: ${q2(x.v)}"><div class="v">${q2(x.v)}</div><div class="col" style="height:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))};${x.month === it.partialMonth ? 'opacity:.45' : ''}"></div></div>`).join('')}</div>
+        <div class="blabels">${series.map(x => `<div>${mLabel(x.month)}${covShort(x.month) ? `<div style="font-size:9.5px;color:#8a5410;margin-top:2px">${covShort(x.month)}</div>` : ''}</div>`).join('')}</div></div>
       </div>
       <div class="card" style="overflow:hidden"><div style="padding:15px 20px" class="title">ตารางยอดใช้รายเดือน</div><div class="scroll"><table class="t" id="mtable"><thead><tr><th>เดือน</th><th class="r">ยอดใช้ (${esc(it.unit || 'หน่วย')})</th><th>สัดส่วน</th></tr></thead>
-        <tbody>${series.map((x, i) => ({ x, i })).reverse().map(({ x, i }) => `<tr class="click" data-ri="${i}"><td>${mLabel(x.month)}${x.month === it.partialMonth ? ' <span class="small muted">(ยังไม่ครบเดือน)</span>' : ''}</td><td class="r" style="font-weight:600">${q2(x.v)}</td><td><div style="max-width:200px;height:7px;background:#edf1ec;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))}"></div></div></td></tr>`).join('')}</tbody></table></div></div>`;
+        <tbody>${series.map((x, i) => ({ x, i })).reverse().map(({ x, i }) => `<tr class="click" data-ri="${i}"><td>${mLabel(x.month)}${covLong(x.month) ? ` <span class="small" style="color:#8a5410">(${covLong(x.month)})</span>` : x.month === it.partialMonth ? ' <span class="small muted">(ยังไม่ครบเดือน)</span>' : ''}</td><td class="r" style="font-weight:600">${q2(x.v)}</td><td><div style="max-width:200px;height:7px;background:#edf1ec;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))}"></div></div></td></tr>`).join('')}</tbody></table></div></div>`;
   },
   /** Quick ranges — "latest" means the newest COMPLETE months (the partial current month is left out). */
   presets(series, it) {
@@ -180,21 +187,21 @@ VIEWS.overview = {
       $$('[data-pre]').forEach(b => { const pr = presets[+b.dataset.pre]; b.classList.toggle('on', !!pr && has && pr.a === lo && pr.b === hi); });
       if (!has) { $('#selBox').innerHTML = ''; return; }
       const pick = series.slice(lo, hi + 1), n = pick.length, sum = pick.reduce((a, x) => a + x.v, 0), avg = sum / n;
-      const vals = pick.map(x => x.v), hasPartial = pick.some(x => x.month === it.partialMonth);
+      const vals = pick.map(x => x.v), hasPartial = pick.some(x => x.month === it.partialMonth), shortM = pick.filter(x => covShort(x.month));
       const cover = avg > 0 && it.stock != null ? it.stock / avg : null, u = esc(it.unit || '');
       const box = (l, v, h) => `<div><div class="small muted">${l}</div><div class="h num" style="font-weight:700;font-size:21px">${v}</div>${h ? `<div class="small muted">${h}</div>` : ''}</div>`;
       $('#selBox').innerHTML = `<div style="background:#eaf1f6;border:1px solid #cdddea;border-radius:12px;padding:12px 16px;margin-bottom:6px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-          <div style="font-weight:600;color:#003049">ช่วงที่เลือก: ${mLabel(pick[0].month)}${n > 1 ? ' – ' + mLabel(pick[n - 1].month) : ''} · ${n} เดือน</div>
+          <div style="font-weight:600;color:#003049">ช่วงที่เลือก: ${mLabel(pick[0].month)}${n > 1 ? ' – ' + mLabelCov(pick[n - 1].month) : covShort(pick[0].month) ? ` (${covShort(pick[0].month)})` : ''} · ${n} เดือน</div>
           <div style="display:flex;gap:6px"><button type="button" class="btn small ghost" id="selCopy">⧉ คัดลอกตัวเลข</button><button type="button" class="btn small" id="selPromo">ใช้ค่าเฉลี่ยนี้คำนวณโปรโมชั่น</button></div></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
           ${box('ยอดใช้รวม', q2(sum), u)}${box('เฉลี่ยต่อเดือน', q2(Math.round(avg * 100) / 100), u + '/เดือน')}
           ${box('สูงสุด / ต่ำสุด', `${q2(Math.max(...vals))} / ${q2(Math.min(...vals))}`, u)}
           ${box('สต็อกพอใช้ (อัตรานี้)', cover == null ? '—' : cover.toFixed(1) + ' เดือน', it.stock == null ? 'ไม่มีข้อมูลสต็อก' : `คงเหลือ ${q2(it.stock)} ${u}`)}
-        </div>${hasPartial ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ช่วงนี้มีเดือน ${mLabel(it.partialMonth)} ซึ่งยังไม่ครบเดือน ค่าเฉลี่ยจะต่ำกว่าความจริง</div>` : ''}</div>`;
+        </div>${shortM.length ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ข้อมูลไม่ครบเดือน: ${shortM.map(x => mLabelCov(x.month)).join(', ')} — ยอดรวมและค่าเฉลี่ยของช่วงนี้จะต่ำกว่าความจริง</div>` : hasPartial ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ช่วงนี้มีเดือน ${mLabel(it.partialMonth)} ซึ่งยังไม่ครบเดือน ค่าเฉลี่ยจะต่ำกว่าความจริง</div>` : ''}</div>`;
       $('#selPromo').onclick = () => { window.promoPick(S.detail); P.avg = String(Math.round(avg * 100) / 100); location.hash = '#promo'; };
       $('#selCopy').onclick = async () => {
-        const t = `${sku.name} ${mLabel(pick[0].month)}–${mLabel(pick[n - 1].month)} (${n} เดือน)\tรวม ${q2(sum)} ${it.unit || ''}\tเฉลี่ย ${q2(Math.round(avg * 100) / 100)} ${it.unit || ''}/เดือน`;
+        const t = `${sku.name} ${mLabel(pick[0].month)}–${mLabelCov(pick[n - 1].month)} (${n} เดือน)\tรวม ${q2(sum)} ${it.unit || ''}\tเฉลี่ย ${q2(Math.round(avg * 100) / 100)} ${it.unit || ''}/เดือน`;
         try { await navigator.clipboard.writeText(t); toast('✓ คัดลอกแล้ว'); } catch (e) { toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้'); }
       };
     };
