@@ -160,10 +160,20 @@ async function loadImports() {
   const { data, error } = await sb.from('stock_usage_imports').select('date_from,date_to,source_file,imported_at').order('date_from');
   if (error) throw error; S.imports = data || []; return S.imports;
 }
-function coveredThrough(month, ranges) {
-  const end = monthEnd(month); let d = month, last = null;
+function coveredFrom(start, end, ranges) {
+  let d = start, last = null;
   while (d <= end && ranges.some(r => r.date_from <= d && d <= r.date_to)) { last = d; d = addDays(d, 1); }
-  return last;   // last day covered continuously from the 1st, or null
+  return last;   // last day covered continuously from start, or null
+}
+const coveredThrough = (month, ranges) => coveredFrom(month, monthEnd(month), ranges);
+const dayTh = d => `${Number(d.slice(8))} ${TH_M[+d.slice(5, 7) - 1]}`;
+/** Same rule as the database function stock_recompute_month — used only to explain the result before importing. */
+function predictMonth(m, ranges) {
+  const base = S.coverage && S.coverage[m] && S.coverage[m].base_to;
+  const full = coveredThrough(m, ranges);
+  if (full && (!base || full >= base)) return { mode: 'daily', through: full };
+  if (base) { const ext = base < monthEnd(m) ? coveredFrom(addDays(base, 1), monthEnd(m), ranges) : null; return { mode: ext ? 'base+daily' : 'base', through: ext || base, base }; }
+  return { mode: null };
 }
 function monthsBetween(a, b) { const out = []; let m = a.slice(0, 8) + '01'; while (m <= b) { out.push(m); m = addDays(monthEnd(m), 1); } return out; }
 
@@ -180,7 +190,9 @@ function previewPlan(p, matched, unmatched) {
     ${unmatched.length ? `<div class="warnbox">รหัสที่ไม่อยู่ในรายการหลัก จะไม่ถูกนำเข้า: <b>${unmatched.map(i => esc(i.code) + (i.name ? ` (${esc(i.name)})` : '')).join(', ')}</b></div>` : ''}
     ${p.bad.length ? `<div class="warnbox">ช่องที่ไม่ใช่ตัวเลข ${p.bad.length} ช่อง จะถูกข้าม: ${p.bad.slice(0, 8).map(esc).join(' · ')}${p.bad.length > 8 ? ' …' : ''}</div>` : ''}
     <div class="grid2">
-      <div class="field"><label class="lbl"><input type="checkbox" id="impU" checked> นำเข้ายอดใช้รายเดือน</label><div class="hint">ช่องว่างในเดือนที่มีในไฟล์ = ใช้ 0 · เดือนเดิมที่มีข้อมูลอยู่แล้วจะถูกแทนที่ด้วยค่าจากไฟล์นี้</div></div>
+      <div class="field"><label class="lbl"><input type="checkbox" id="impU" checked> นำเข้ายอดใช้รายเดือน</label><div class="hint">ช่องว่างในเดือนที่มีในไฟล์ = ใช้ 0 · เดือนเดิมที่มีข้อมูลอยู่แล้วจะถูกแทนที่ด้วยค่าจากไฟล์นี้</div>
+        <label for="impThrough" class="hint" style="display:block;margin-top:8px">ยอดเดือน ${mLabel(p.months[p.months.length - 1])} ในไฟล์ เป็นข้อมูลถึงวันที่</label>
+        <input type="date" id="impThrough" class="input" style="max-width:200px" min="${p.months[p.months.length - 1]}" max="${monthEnd(p.months[p.months.length - 1])}" value="${partial ? addDays(todayISO(), -1) : monthEnd(p.months[p.months.length - 1])}"></div>
       <div class="field"><label class="lbl"><input type="checkbox" id="impS" ${p.hasStock ? 'checked' : 'disabled'}> นำเข้ายอดสต็อกคงเหลือ</label>
         <label for="impDate" class="hint" style="display:block">สต็อก ณ วันที่</label><input type="date" id="impDate" class="input" style="max-width:200px" value="${todayISO()}"></div>
     </div>`;
@@ -228,9 +240,12 @@ function previewMovement(p, matched, unmatched) {
   const tot = movementTotals(p).filter(i => known.has(i.code)).sort((a, b) => a.code.localeCompare(b.code));
   const ranges = (S.imports || []).concat([{ date_from: p.from, date_to: p.to }]);
   const notes = monthsBetween(p.from, p.to).map(m => {
-    const thr = coveredThrough(m, ranges);
-    return thr ? `<li>${mLabel(m)}: มีข้อมูลรายวันต่อเนื่อง 1 – ${Number(thr.slice(8))} ${TH_M[+m.slice(5, 7) - 1]} → ยอดเดือนนี้จะคำนวณจากข้อมูลรายวัน</li>`
-      : `<li style="color:#8a5410">${mLabel(m)}: ยังไม่มีข้อมูลรายวันตั้งแต่วันที่ 1 → ระบบจะเก็บยอดรายวันไว้ แต่ยอดรวมของเดือนยังใช้ค่าเดิม จนกว่าจะนำเข้าไฟล์เคลื่อนไหวที่เริ่มตั้งแต่วันที่ 1 ${TH_M[+m.slice(5, 7) - 1]}</li>`;
+    const r = predictMonth(m, ranges);
+    if (r.mode === 'daily') return `<li>${mLabel(m)}: ยอดเดือน = ข้อมูลรายวัน 1 – ${dayTh(r.through)}</li>`;
+    if (r.mode === 'base+daily') return `<li>${mLabel(m)}: ยอดเดือน = ไฟล์รายเดือน (1 – ${dayTh(r.base)}) + ข้อมูลรายวัน ${dayTh(addDays(r.base, 1))} – ${dayTh(r.through)} → รวม 1 – ${dayTh(r.through)}</li>`;
+    if (r.mode === 'base' && p.to <= r.base) return `<li>${mLabel(m)}: ช่วงนี้อยู่ในช่วงที่ไฟล์รายเดือนมีอยู่แล้ว (1 – ${dayTh(r.base)}) → ยอดเดือนไม่เปลี่ยน ไม่นับซ้ำ (ยอดรายวันเก็บไว้ ใช้ต่อเมื่อนำเข้าครบตั้งแต่วันที่ 1)</li>`;
+    if (r.mode === 'base') return `<li style="color:#8a5410">${mLabel(m)}: ช่วงนี้ไม่ต่อจากข้อมูลเดิม (เดิมมีถึง ${dayTh(r.base)} แต่ไฟล์นี้เริ่ม ${dayTh(p.from)}) → ยอดเดือนยังเป็น 1 – ${dayTh(r.base)} จนกว่าจะนำเข้าช่วง ${dayTh(addDays(r.base, 1))} เป็นต้นไป</li>`;
+    return `<li style="color:#8a5410">${mLabel(m)}: ยังไม่มีข้อมูลตั้งแต่วันที่ 1 → เก็บยอดรายวันไว้ แต่ยังไม่แสดงเป็นยอดเดือน จนกว่าจะนำเข้าช่วงที่เริ่มวันที่ 1 ${TH_M[+m.slice(5, 7) - 1]}</li>`;
   }).join('');
   return `<div class="small muted" style="margin-bottom:14px">รายงานสต็อกเคลื่อนไหว <b>${esc(p.fileName)}</b> · ช่วง <b>${dLabel(p.from)} – ${dLabel(p.to)}</b> · ${fmt(p.tx)} รายการ · ${p.branches.length} สาขา/คลัง</div>
     <div class="info" style="font-size:12.5px">🔒 ไฟล์นี้มีชื่อผู้ป่วย — เว็บอ่านไฟล์ในเครื่องของคุณ และบันทึกเฉพาะ <b>ยอดใช้รวมต่อ SKU ต่อวัน</b> ไม่ได้ส่งชื่อผู้ป่วยหรือรายละเอียดรายการขึ้นระบบ</div>
@@ -271,6 +286,7 @@ VIEWS.import = {
         <br>① <b>รายงานสต็อกเคลื่อนไหว</b> (stock_movement_report) → ยอดใช้
         <br>② <b>ยอดยาคงคลัง - รายตำแหน่งเก็บ</b> (stock_location_report) → ยอดสต็อกคงเหลือ
         <br>③ ไฟล์ stock plan (Excel) → ยอดใช้รายเดือนย้อนหลัง</div>
+      ${coverageCard()}
       <label class="drop" for="impFile"><div style="font-size:28px">⭳</div><div style="font-weight:600;margin:4px 0">เลือกไฟล์ (.csv หรือ .xlsx)</div><div class="small muted">${IMP.file ? esc(IMP.file) : 'คลิกเพื่อเลือกไฟล์ — นำเข้าทีละไฟล์'}</div></label>
       <input type="file" id="impFile" accept=".csv,.xlsx,.xls" style="position:absolute;width:1px;height:1px;opacity:0">
       ${IMP.err && !p ? `<div class="err" style="margin-top:14px">${esc(IMP.err)}</div>` : ''}
@@ -294,6 +310,18 @@ VIEWS.import = {
   },
 };
 
+function coverageCard() {
+  const months = Object.keys(S.coverage || {}).sort().slice(-6).reverse();
+  if (!months.length) return '';
+  const modeTxt = c => c.mode === 'daily' ? 'รายงานเคลื่อนไหว (รายวัน)' : c.mode === 'base+daily' ? `ไฟล์รายเดือน (ถึง ${dayTh(c.base_to)}) + รายงานเคลื่อนไหว` : 'ไฟล์รายเดือน';
+  return `<div class="card" style="overflow:hidden;margin-bottom:14px"><div class="title" style="padding:14px 20px 4px">สถานะข้อมูลยอดใช้ (6 เดือนล่าสุด)</div>
+    <div class="small muted" style="padding:0 20px 10px">ยอดของแต่ละวันเก็บได้ค่าเดียว — นำเข้าช่วงวันที่ซ้ำกันกี่ครั้ง (หรือหลายคนนำเข้าพร้อมกัน) ยอดก็ไม่เบิ้ล ค่าล่าสุดจะแทนที่ของเดิม</div>
+    <table class="t"><thead><tr><th>เดือน</th><th>ข้อมูลครอบคลุม</th><th>ที่มา</th></tr></thead><tbody>
+    ${months.map(m => { const c = S.coverage[m], full = c.through && c.through >= monthEnd(m);
+      return `<tr><td>${mLabel(m)}</td><td style="${full ? '' : 'color:#8a5410;font-weight:600'}">${c.through ? `1 – ${dayTh(c.through)}${full ? ' (ครบเดือน)' : ''}` : '—'}</td><td class="small">${esc(modeTxt(c))}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+}
+
 async function upsertChunks(table, rows, onConflict) {
   for (let k = 0; k < rows.length; k += 500) { const { error } = await sb.from(table).upsert(rows.slice(k, k + 500), { onConflict }); if (error) throw error; }
 }
@@ -310,21 +338,20 @@ async function importMovement(p, now) {
   const rows = [...daily.entries()].filter(([, v]) => Math.abs(v) > 1e-9).map(([k, v]) => { const [sku_code, day] = k.split('|'); return { sku_code, day, qty: Math.round(v * 10000) / 10000, source_file: p.fileName, imported_at: now }; });
   await upsertChunks('stock_usage_daily', rows, 'sku_code,day');
   { const { error } = await sb.from('stock_usage_imports').insert({ date_from: p.from, date_to: p.to, source_file: p.fileName, types: Object.keys(on).filter(t => on[t]) }); if (error) throw error; }
-  // recompute monthly totals for every touched month that daily data covers from the 1st
-  const ranges = await loadImports(); const updated = [], kept = [];
-  for (const m of monthsBetween(p.from, p.to)) {
-    const thr = coveredThrough(m, ranges);
-    if (!thr) { kept.push(m); continue; }
-    const { data, error } = await sb.from('stock_usage_daily').select('sku_code,qty').gte('day', m).lte('day', monthEnd(m));
+  // recompute every touched month in the database (idempotent: the same data always gives the same totals)
+  const res = await recomputeMonths(monthsBetween(p.from, p.to));
+  await loadImports();
+  return `✓ บันทึกยอดใช้รายวัน ${rows.length} แถว ช่วง ${dLabel(p.from)} – ${dLabel(p.to)} · ` + res;
+}
+
+async function recomputeMonths(months) {
+  const parts = [];
+  for (const m of months) {
+    const { data, error } = await sb.rpc('stock_recompute_month', { p_month: m });
     if (error) throw error;
-    const sum = {}; (data || []).forEach(r => { sum[r.sku_code] = (sum[r.sku_code] || 0) + Number(r.qty); });
-    const mrows = S.skus.filter(s => s.is_tracked || sum[s.code]).map(s => ({ sku_code: s.code, month: m, qty: Math.round((sum[s.code] || 0) * 10000) / 10000, source_file: `รายวัน 1–${Number(thr.slice(8))} ${TH_M[+m.slice(5, 7) - 1]}`, imported_at: now }));
-    await upsertChunks('stock_monthly_usage', mrows, 'sku_code,month');
-    updated.push(`${mLabel(m)} (ข้อมูลถึง ${Number(thr.slice(8))} ${TH_M[+m.slice(5, 7) - 1]})`);
+    parts.push(data && data.through ? `${mLabel(m)} = ข้อมูล 1 – ${dayTh(data.through)}` : `${mLabel(m)} ยังไม่มีข้อมูลตั้งแต่วันที่ 1 (เก็บยอดรายวันไว้แล้ว)`);
   }
-  return `✓ บันทึกยอดใช้รายวัน ${rows.length} แถว ช่วง ${dLabel(p.from)} – ${dLabel(p.to)}`
-    + (updated.length ? ` · อัปเดตยอดรายเดือน: ${updated.join(', ')}` : '')
-    + (kept.length ? ` · ${kept.map(mLabel).join(', ')} ยังใช้ยอดเดือนเดิม เพราะยังไม่มีข้อมูลรายวันตั้งแต่วันที่ 1 — นำเข้าไฟล์เคลื่อนไหวตั้งแต่วันที่ 1 ของเดือนเพื่อให้ยอดเดือนนี้อัปเดต` : '');
+  return 'ยอดรายเดือน: ' + parts.join(' · ');
 }
 
 async function runImport() {
@@ -342,10 +369,18 @@ async function runImport() {
   try {
     if (p.kind === 'movement') IMP.done = await importMovement(p, now);
     else {
-      let nU = 0, sRows = [];
+      let nU = 0, sRows = [], recomputeNote = '';
       if (doU) {
-        const rows = []; items.forEach(i => i.usage.forEach(u => rows.push({ sku_code: i.code, month: u.month, qty: u.qty == null ? 0 : u.qty, source_file: p.fileName, imported_at: now })));
+        const rows = []; items.forEach(i => i.usage.forEach(u => { const q = u.qty == null ? 0 : u.qty; rows.push({ sku_code: i.code, month: u.month, qty: q, base_qty: q, source_file: p.fileName, imported_at: now }); }));
         await upsertChunks('stock_monthly_usage', rows, 'sku_code,month'); nU = rows.length;
+        const lastM = p.months[p.months.length - 1], lastTo = $('#impThrough') ? $('#impThrough').value : '';
+        if (lastTo && (lastTo < lastM || lastTo > monthEnd(lastM))) throw new Error(`วันที่ข้อมูลเดือน ${mLabel(lastM)} ต้องอยู่ในเดือนนั้น`);
+        const cov = p.months.map(m => { const to = m === lastM && lastTo ? lastTo : monthEnd(m); return { month: m, base_to: to, base_source: p.fileName, through: to, mode: 'base', updated_at: now }; });
+        await upsertChunks('stock_month_coverage', cov, 'month');
+        // months that also have daily data (or the newest month) are recomputed so daily data after the file is kept
+        const ranges = S.imports || await loadImports();
+        const redo = p.months.filter(m => m === lastM || ranges.some(r => r.date_from <= monthEnd(m) && r.date_to >= m));
+        recomputeNote = await recomputeMonths(redo);
       }
       if (doS && p.kind === 'plan') sRows = items.filter(i => i.stock != null).map(i => ({ sku_code: i.code, as_of: asOf, qty: i.stock, source_file: p.fileName, imported_at: now }));
       if (doS && p.kind === 'onhand') {
@@ -354,7 +389,7 @@ async function runImport() {
         if (ui.zero) S.skus.filter(s => s.is_tracked && !p.items.some(i => i.code === s.code)).forEach(s => sRows.push({ sku_code: s.code, as_of: asOf, qty: 0, source_file: p.fileName, imported_at: now }));
       }
       if (sRows.length) await upsertChunks('stock_onhand', sRows, 'sku_code,as_of');
-      IMP.done = `✓ นำเข้าเรียบร้อย — ${doU ? `ยอดใช้ ${nU} แถว · ` : ''}${doS ? `สต็อก ${sRows.length} รายการ ณ ${dLabel(asOf)} ` : ''}จากไฟล์ ${p.fileName}`;
+      IMP.done = `✓ นำเข้าเรียบร้อย — ${doU ? `ยอดใช้ ${nU} แถว · ` : ''}${doS ? `สต็อก ${sRows.length} รายการ ณ ${dLabel(asOf)} ` : ''}จากไฟล์ ${p.fileName}${recomputeNote ? ' · ' + recomputeNote : ''}`;
     }
     Object.assign(IMP, { parsed: null, file: null, oh: null, mv: null, busy: false });
     await loadData(true);
