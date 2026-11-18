@@ -146,8 +146,10 @@ VIEWS.overview = {
         ${stat('เฉลี่ย 6 เดือน', q2(it.avg6), (it.unit || 'หน่วย') + '/เดือน')}
         ${stat('พอใช้อีก', monthsText(it), 'จากเฉลี่ย 3 เดือน', STATUS[it.status].fg)}
         ${stat(`ควรสั่ง (ถึง ${st.target} ด.)`, it.need > 0 ? q2(Math.ceil(it.need)) : '—', it.needPacks ? `≈ ${it.needPacks} ${esc(sku.purchase_unit || '')}` : (it.unit || ''))}
+        ${(() => { const ref = typeof promoRef === 'function' ? promoRef(sku.code).last : null; return ref ? stat('ราคาที่ได้ล่าสุด', fmt(Number(ref.chosen_cpu), 2), `บาท/${esc(it.unit)} · ${shortD(ref.decided_on)} (${esc(decLabel(ref.decision).replace('ตัวเลือก ', ''))})`) : ''; })()}
       </div>
       ${it.partialMonth ? `<div class="info">เดือน ${mLabel(it.partialMonth)} ยังไม่ครบเดือน${covThrough(it.partialMonth) ? ` (ข้อมูลถึง ${dLabel(covThrough(it.partialMonth))})` : ''} — ใช้ไปแล้ว ${q2(it.partialV)} ${esc(it.unit)} (ไม่นำมาคิดค่าเฉลี่ย)</div>` : ''}
+      ${typeof promoSkuCard === 'function' ? promoSkuCard(sku.code, it.unit) : ''}
       <div class="card pad" style="margin-bottom:18px">
         <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px"><div class="title">ยอดใช้รายเดือน</div>
           <div style="display:flex;gap:16px" class="small muted">${years.map(y => `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${yColor(y)}"></span>ปี ${Number(y) + 543}</span>`).join('')}</div></div>
@@ -177,6 +179,7 @@ VIEWS.overview = {
   detailBind() {
     $('#back').onclick = () => { S.detail = null; render(); };
     $('#toPromo').onclick = () => { if (window.promoPick) window.promoPick(S.detail); };
+    if (typeof promoSkuBind === 'function') promoSkuBind(S.detail);
     const sku = S.skus.find(s => s.code === S.detail), it = computeItem(sku), series = it.series.slice(-24);
     const presets = VIEWS.overview.presets(series, it);
     const sel = S.ui.sel && S.ui.sel.code === S.detail ? S.ui.sel : (S.ui.sel = Object.assign({ code: S.detail }, presets[0] ? { a: presets[0].a, b: presets[0].b } : { a: null, b: null }));
