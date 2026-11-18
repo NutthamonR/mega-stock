@@ -7,7 +7,7 @@ const S = {
   session: null, member: null, recovery: false, authMode: 'login', authMsg: null,
   route: 'overview', detail: null,
   loaded: false, loading: false, loadErr: null,
-  skus: [], usage: {}, months: [], stock: {}, stockDate: null, pendingCount: 0,
+  skus: [], usage: {}, months: [], stock: {}, stockDate: null, pendingCount: 0, coverage: {}, usageThrough: null,
   ui: {},
 };
 const VIEWS = {};
@@ -65,11 +65,14 @@ async function loadData(silent) {
   if (S.loading) return;
   S.loading = true; S.loadErr = null; if (!silent) render();
   try {
-    const [skus, usage, stock] = await Promise.all([
+    const [skus, usage, stock, cov] = await Promise.all([
       fetchAll('stock_skus', '*', 'code'),
       fetchAll('stock_monthly_usage', 'sku_code,month,qty', 'month'),
       fetchAll('stock_latest_onhand', 'sku_code,as_of,qty', 'sku_code'),
+      fetchAll('stock_month_coverage', 'month,base_to,base_source,through,mode', 'month'),
     ]);
+    S.coverage = {}; S.usageThrough = null;
+    cov.forEach(c => { S.coverage[c.month] = c; if (c.through && (!S.usageThrough || c.through > S.usageThrough)) S.usageThrough = c.through; });
     S.skus = skus;
     S.usage = {}; const ms = new Set();
     usage.forEach(r => { (S.usage[r.sku_code] = S.usage[r.sku_code] || {})[r.month] = Number(r.qty); ms.add(r.month); });
