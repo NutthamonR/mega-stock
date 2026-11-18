@@ -43,7 +43,8 @@ VIEWS.team = {
             ${m.status !== 'approved' ? `<button class="btn small" data-act="approved" data-id="${m.user_id}">อนุมัติ</button>` : ''}
             ${m.status === 'pending' ? `<button class="btn danger small" data-act="rejected" data-id="${m.user_id}">ไม่อนุมัติ</button>` : ''}
             ${m.status === 'approved' ? `<button class="btn danger small" data-act="disabled" data-id="${m.user_id}">ปิดการใช้งาน</button>` : ''}
-            <button class="btn ghost small" data-medit="${m.user_id}">แก้ไข</button>`}</td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">ไม่มีรายการ</td></tr>'}</tbody></table></div></div>`;
+            <button class="btn ghost small" data-medit="${m.user_id}">แก้ไข</button>
+            <button class="btn ghost small" data-mpw="${m.user_id}">รีเซ็ตรหัสผ่าน</button>`}${m.must_change_pw ? '<div class="small" style="color:#8a5410;margin-top:4px">ใช้รหัสชั่วคราวอยู่ — ยังไม่ได้ตั้งรหัสใหม่</div>' : ''}</td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">ไม่มีรายการ</td></tr>'}</tbody></table></div></div>`;
   },
   bind() {
     const r = $('#tReload'); if (r) r.onclick = () => { TEAM.list = null; render(); };
@@ -54,6 +55,7 @@ VIEWS.team = {
       if (error) { toast(errMsg(error)); b.disabled = false; return; }
       toast({ approved: '✓ อนุมัติแล้ว', rejected: 'ไม่อนุมัติคำขอแล้ว', disabled: 'ปิดการใช้งานแล้ว' }[b.dataset.act]); loadTeam();
     });
+    $$('[data-mpw]').forEach(b => b.onclick = () => resetPwModal(TEAM.list.find(x => x.user_id === b.dataset.mpw)));
     $$('[data-medit]').forEach(b => b.onclick = () => {
       const m = TEAM.list.find(x => x.user_id === b.dataset.medit);
       openModal(`<h2>แก้ไขข้อมูลสมาชิก</h2><div class="small muted" style="margin-bottom:16px">${esc(m.email)}</div><form id="fMem" novalidate>${profileFields(m, 'm_')}<div id="memErr"></div>
@@ -67,6 +69,45 @@ VIEWS.team = {
     });
   },
 };
+
+/** Owner resets a member's password: email them a reset link, or set a temporary password they must change at next sign-in. */
+function resetPwModal(m) {
+  const who = esc(m.nickname ? `${m.nickname} · ${m.full_name}` : m.full_name);
+  openModal(`<h2>รีเซ็ตรหัสผ่าน</h2><div class="small muted" style="margin-bottom:14px">${who} · ${esc(m.email)}</div>
+    <div class="warnbox" style="font-size:13px">บัญชีนี้ใช้ร่วมกับระบบรับของ — รหัสใหม่จะใช้กับทั้งสองระบบ</div>
+    <div class="card pad" style="margin-bottom:12px"><div class="title" style="margin-bottom:6px">① ส่งลิงก์ตั้งรหัสใหม่ทางอีเมล</div>
+      <div class="small muted" style="margin-bottom:10px">ผู้ใช้ตั้งรหัสเองจากลิงก์ในอีเมล — คุณไม่เห็นรหัส</div>
+      <button class="btn ghost small" id="rpMail">ส่งลิงก์ไปที่ ${esc(m.email)}</button></div>
+    <div class="card pad"><div class="title" style="margin-bottom:6px">② ตั้งรหัสชั่วคราว</div>
+      <div class="small muted" style="margin-bottom:10px">ใช้เมื่อผู้ใช้ไม่ได้รับอีเมล — ระบบสุ่มรหัสให้ คุณแจ้งผู้ใช้เอง (เช่น บอกตรงๆ หรือ LINE ส่วนตัว) และผู้ใช้ต้องตั้งรหัสใหม่ทันทีที่เข้าสู่ระบบ รหัสเดิมจะใช้ไม่ได้อีก</div>
+      <button class="btn small danger" id="rpTemp">ตั้งรหัสชั่วคราว</button></div>
+    <div id="rpOut" style="margin-top:12px"></div>
+    <div class="actions"><button type="button" class="btn ghost" id="rpClose">ปิด</button></div>`);
+  const out = $('#rpOut');
+  $('#rpClose').onclick = () => { closeModal(); TEAM.list = null; render(); };
+  $('#rpMail').onclick = async e => {
+    e.target.disabled = true;
+    const { error } = await sb.auth.resetPasswordForEmail(m.email, { redirectTo: location.origin + location.pathname });
+    out.innerHTML = error ? `<div class="err">${esc(/rate limit|security purposes/i.test(error.message || '') ? 'ส่งอีเมลถี่เกินไป — รอสักครู่แล้วลองใหม่ หรือใช้วิธีตั้งรหัสชั่วคราว' : errMsg(error))}</div>`
+      : `<div class="ok">ส่งลิงก์แล้ว — ให้ ${who} เปิดอีเมล (ดูใน Spam ด้วย) แล้วกดลิงก์เพื่อตั้งรหัสใหม่</div>`;
+    e.target.disabled = false;
+  };
+  $('#rpTemp').onclick = async e => {
+    if (!$('#rpTemp').dataset.sure) { $('#rpTemp').dataset.sure = '1'; $('#rpTemp').textContent = 'ยืนยัน — รหัสเดิมของ ' + (m.nickname || m.full_name) + ' จะใช้ไม่ได้'; return; }
+    e.target.disabled = true; out.innerHTML = '<div class="small muted">กำลังตั้งรหัส…</div>';
+    const { data, error } = await sb.functions.invoke('stock-admin-reset-password', { body: { user_id: m.user_id } });
+    if (error || !data || !data.password) {
+      let msg = error ? error.message : 'ไม่ได้รับรหัสจากระบบ';
+      try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch (er) {}
+      out.innerHTML = `<div class="err">ตั้งรหัสไม่สำเร็จ: ${esc(msg === 'owner only' ? 'ทำได้เฉพาะเจ้าของระบบ' : msg)}</div>`; e.target.disabled = false; return;
+    }
+    out.innerHTML = `<div class="ok"><div style="margin-bottom:8px">ตั้งรหัสชั่วคราวให้ ${who} แล้ว — แจ้งรหัสนี้ให้ผู้ใช้ (รหัสจะแสดงครั้งเดียว)</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><code id="rpPw" style="font-size:20px;letter-spacing:2px;background:#fff;padding:6px 12px;border-radius:8px;border:1px solid #cfe3d8">${esc(data.password)}</code>
+      <button type="button" class="btn small ghost" id="rpCopy">⧉ คัดลอก</button></div>
+      <div class="small" style="margin-top:8px">เข้าสู่ระบบด้วยอีเมล ${esc(m.email)} + รหัสนี้ แล้วระบบจะให้ตั้งรหัสใหม่ทันที</div></div>`;
+    $('#rpCopy').onclick = async () => { try { await navigator.clipboard.writeText(data.password); toast('✓ คัดลอกรหัสแล้ว'); } catch (er) { toast('คัดลอกไม่ได้ — จดรหัสจากหน้าจอ'); } };
+  };
+}
 
 VIEWS.profile = {
   html() {
