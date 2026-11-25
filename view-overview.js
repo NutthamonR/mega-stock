@@ -108,8 +108,9 @@ VIEWS.overview = {
     const statChips = [['all', 'ทุกสถานะ'], ['critical', 'ต่ำกว่าจุดสั่งซื้อ'], ['warning', 'ใกล้หมด'], ['ok', 'ปกติ'], ['nostock', 'ไม่มีข้อมูลสต็อก']];
     const kpi = (l, v, h, dot, color) => `<div class="kpi"><div class="l"><span class="dot" style="background:${dot}"></span>${l}</div><div class="v" style="color:${color || '#142433'}">${v}</div><div class="h2">${h}</div></div>`;
     const tbl = `<div class="card" style="overflow:hidden"><div class="scroll"><table class="t" style="min-width:980px">
-      <thead><tr><th>สินค้า</th><th>หมวด</th><th class="r">คงเหลือ</th><th class="r">ใช้ ${lastLbl}</th><th class="r">เฉลี่ย 3 ด.</th><th class="r">เฉลี่ย 6 ด.</th><th>พอใช้อีก</th><th class="r">ควรสั่ง (ถึง ${st.target} ด.)</th><th>สถานะ</th></tr></thead>
-      <tbody>${rows.map(x => `<tr class="click" data-open="${esc(x.code)}" tabindex="0">
+      <thead><tr><th style="width:46px"><span class="sr-only">ขยาย</span></th><th>สินค้า</th><th>หมวด</th><th class="r">คงเหลือ</th><th class="r">ใช้ ${lastLbl}</th><th class="r">เฉลี่ย 3 ด.</th><th class="r">เฉลี่ย 6 ด.</th><th>พอใช้อีก</th><th class="r">ควรสั่ง (ถึง ${st.target} ด.)</th><th>สถานะ</th></tr></thead>
+      <tbody>${rows.map(x => { const o = OPEN.has(x.code); return `<tr class="click ${o ? 'xopen' : ''}" data-exp="${esc(x.code)}" tabindex="0" aria-expanded="${o}">
+        <td><span class="xbtn" aria-hidden="true">▶</span></td>
         <td><div style="font-weight:600;font-size:14.5px">${esc(x.name)}${x.isNew ? newTag(x.nw.tag) : ''}</div><div class="small muted">${esc(x.code)}${x.unit ? ' · ' + esc(x.unit) : ''}</div></td>
         <td><span class="tag">${esc(x.category)}</span></td>
         <td class="r" style="font-weight:600">${x.stock == null ? '—' : q2(x.stock)}</td>
@@ -117,7 +118,7 @@ VIEWS.overview = {
         <td class="r">${x.isNew ? `<b>${q2(Math.round(x.avg3 * 100) / 100)}</b><div class="small muted" style="white-space:nowrap">${esc(x.nw.text)}</div>` : q2(x.avg3)}</td><td class="r muted">${x.isNew ? '—' : q2(x.avg6)}</td>
         <td><div style="font-weight:600;font-size:13.5px;color:${STATUS[x.status].fg}">${monthsText(x)}</div><div class="mbar"><div style="width:${x.months == null ? 0 : Math.min(x.months / st.target, 1) * 100}%;background:${STATUS[x.status].dot}"></div></div></td>
         <td class="r">${x.need > 0 ? `${q2(Math.ceil(x.need))} ${esc(x.unit)}${x.needPacks ? `<div class="small muted">≈ ${x.needPacks} ${esc(x.sku.purchase_unit || '')}</div>` : ''}` : '<span class="muted">—</span>'}</td>
-        <td>${statusPill(x.status)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty">ไม่พบรายการ</td></tr>'}</tbody></table></div></div>`;
+        <td>${statusPill(x.status)}</td></tr>${o ? `<tr class="xdetail" data-xd="${esc(x.code)}"><td colspan="10">${expandHtml(x)}</td></tr>` : ''}`; }).join('') || '<tr><td colspan="10" class="empty">ไม่พบรายการ</td></tr>'}</tbody></table></div></div>`;
     const cards = `<div class="cards">${rows.map(x => `<button class="scard" data-open="${esc(x.code)}" style="border-left:4px solid ${STATUS[x.status].dot}">
         <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:12px"><div><div style="font-weight:600;font-size:16px">${esc(x.name)}</div><div class="small muted">${esc(x.category)} · ${esc(x.code)}</div>${x.isNew ? newTag(x.nw.tag, 0) : ''}</div>${statusPill(x.status)}</div>
         <div style="display:flex;align-items:baseline;gap:8px"><span class="h" style="font-weight:700;font-size:26px">${x.stock == null ? '—' : q2(x.stock)}</span><span class="muted" style="font-size:13px">${esc(x.unit)} คงเหลือ</span></div>
@@ -141,8 +142,8 @@ VIEWS.overview = {
         <select id="ovSort" class="input" style="width:auto" aria-label="เรียงลำดับ">${[['urgent', 'เรียง: ด่วนก่อน'], ['months', 'เรียง: พอใช้น้อยสุด'], ['usage', 'เรียง: ใช้เยอะสุด'], ['name', 'เรียง: ชื่อ A–Z']].map(([v, l]) => `<option value="${v}" ${ui.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${cats.map(c => `<button class="pillchip ${ui.cat === c ? 'on' : ''}" data-cat="${esc(c)}">${c === 'all' ? 'ทั้งหมด' : esc(c)}</button>`).join('')}</div>
-      ${st.view === 'cards' ? cards : tbl}
-      <div class="foot">แสดง ${rows.length} จาก ${all.length} รายการ · คลิกที่สินค้าเพื่อดูยอดใช้รายเดือน</div>`;
+      ${st.view === 'cards' ? cards : `<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px"><button type="button" class="btn ghost small" id="xAll">⊞ ขยายทั้งหมด</button><button type="button" class="btn ghost small" id="xNone" ${OPEN.size ? '' : 'disabled'}>⊟ ย่อทั้งหมด${OPEN.size ? ` (${OPEN.size})` : ''}</button></div>${tbl}`}
+      <div class="foot">แสดง ${rows.length} จาก ${all.length} รายการ · ${st.view === 'cards' ? 'คลิกที่สินค้าเพื่อดูยอดใช้รายเดือน' : 'คลิกแถวเพื่อดูยอดใช้รายเดือนและเลือกช่วงเดือนดูยอดรวม'}</div>`;
   },
   bind() {
     if (S.detail) return VIEWS.overview.detailBind();
@@ -156,6 +157,15 @@ VIEWS.overview = {
     $('#setTarget').onchange = e => { lsSet('settings', Object.assign(settings(), { target: Number(e.target.value) })); render(); };
     $$('[data-open]').forEach(el => { el.onclick = () => { S.detail = el.dataset.open; render(); window.scrollTo(0, 0); }; el.onkeydown = e => { if (e.key === 'Enter') el.click(); }; });
     healthBind();
+    $$('[data-exp]').forEach(tr => { tr.onclick = () => { const c = tr.dataset.exp; OPEN.has(c) ? OPEN.delete(c) : OPEN.add(c); render(); }; tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tr.click(); } }; });
+    const xa = $('#xAll'); if (xa) xa.onclick = () => { $$('[data-exp]').forEach(tr => OPEN.add(tr.dataset.exp)); render(); };
+    const xn = $('#xNone'); if (xn) xn.onclick = () => { OPEN.clear(); render(); };
+    $$('[data-xd]').forEach(row => {
+      const sku = S.skus.find(s => s.code === row.dataset.xd); if (!sku) return;
+      const it = computeItem(sku); usageSelBind(row, sku, it, it.series.slice(-13));
+      const fp = row.querySelector('[data-xpromo]'); if (fp) fp.onclick = () => { window.promoPick(sku.code); location.hash = '#promo'; };
+      const ff = row.querySelector('[data-xfull]'); if (ff) ff.onclick = () => { S.detail = sku.code; render(); window.scrollTo(0, 0); };
+    });
   },
   detailHtml() {
     const sku = S.skus.find(s => s.code === S.detail); if (!sku) { S.detail = null; return VIEWS.overview.html(); }
@@ -182,19 +192,7 @@ VIEWS.overview = {
       ${it.partialMonth ? `<div class="info">เดือน ${mLabel(it.partialMonth)} ยังไม่ครบเดือน${covThrough(it.partialMonth) ? ` (ข้อมูลถึง ${dLabel(covThrough(it.partialMonth))})` : ''} — ใช้ไปแล้ว ${q2(it.partialV)} ${esc(it.unit)} (ไม่นำมาคิดค่าเฉลี่ย)</div>` : ''}
       ${it.isNew ? newItemBox(it) : ''}
       ${typeof promoSkuCard === 'function' ? promoSkuCard(sku.code, it.unit) : ''}
-      <div class="card pad" style="margin-bottom:18px">
-        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px"><div class="title">ยอดใช้รายเดือน</div>
-          <div style="display:flex;gap:16px" class="small muted">${years.map(y => `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${yColor(y)}"></span>ปี ${Number(y) + 543}</span>`).join('')}</div></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-          <span class="small muted" style="margin-right:4px">เลือกช่วง:</span>
-          ${VIEWS.overview.presets(series, it).map((pr, k) => `<button type="button" class="pillchip" data-pre="${k}">${pr.label}</button>`).join('')}
-          <button type="button" class="pillchip" data-pre="clear">ล้าง</button>
-        </div>
-        <div id="selBox"></div>
-        <div class="small muted" style="margin:4px 0 10px">กดค้างที่แท่งเดือนแรกแล้วลากไปเดือนสุดท้าย (หรือคลิกเดือนแรก แล้ว Shift+คลิกเดือนสุดท้าย) — เลือกในตารางด้านล่างได้เหมือนกัน</div>
-        <div class="scroll" style="padding-bottom:6px"><div class="bars" id="bars" style="user-select:none;touch-action:pan-x">${series.map((x, i) => `<div class="b" data-i="${i}" title="${mLabelCov(x.month)}: ${it.firstUse && x.month < it.firstUse ? 'ยังไม่มีสินค้า' : q2(x.v)}"><div class="v">${it.firstUse && x.month < it.firstUse ? '' : q2(x.v)}</div><div class="col" style="height:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))};${x.month === it.partialMonth ? 'opacity:.45' : ''}"></div></div>`).join('')}</div>
-        <div class="blabels">${series.map(x => `<div>${mLabel(x.month)}${it.firstUse && x.month < it.firstUse ? '<div style="font-size:9.5px;color:#8a958e;margin-top:2px">ยังไม่มี</div>' : ''}${covShort(x.month) ? `<div style="font-size:9.5px;color:#8a5410;margin-top:2px">${covShort(x.month)}</div>` : ''}</div>`).join('')}</div></div>
-      </div>
+      <div class="card pad" style="margin-bottom:18px">${usageChartHtml(it, series)}</div>
       <div class="card" style="overflow:hidden"><div style="padding:15px 20px" class="title">ตารางยอดใช้รายเดือน</div><div class="scroll"><table class="t" id="mtable"><thead><tr><th>เดือน</th><th class="r">ยอดใช้ (${esc(it.unit || 'หน่วย')})</th><th>สัดส่วน</th></tr></thead>
         <tbody>${series.map((x, i) => ({ x, i })).reverse().map(({ x, i }) => `<tr class="click" data-ri="${i}"><td>${mLabel(x.month)}${it.firstUse && x.month < it.firstUse ? ' <span class="small muted">(ยังไม่มีสินค้า)</span>' : ''}${covLong(x.month) ? ` <span class="small" style="color:#8a5410">(${covLong(x.month)})</span>` : x.month === it.partialMonth ? ' <span class="small muted">(ยังไม่ครบเดือน)</span>' : ''}</td><td class="r" style="font-weight:600">${q2(x.v)}</td><td><div style="max-width:200px;height:7px;background:#edf1ec;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))}"></div></div></td></tr>`).join('')}</tbody></table></div></div>`;
   },
@@ -213,52 +211,77 @@ VIEWS.overview = {
     $('#toPromo').onclick = () => { if (window.promoPick) window.promoPick(S.detail); };
     if (typeof promoSkuBind === 'function') promoSkuBind(S.detail);
     newItemBind();
-    const sku = S.skus.find(s => s.code === S.detail), it = computeItem(sku), series = it.series.slice(-24);
-    const presets = VIEWS.overview.presets(series, it);
-    const sel = S.ui.sel && S.ui.sel.code === S.detail ? S.ui.sel : (S.ui.sel = Object.assign({ code: S.detail }, presets[0] ? { a: presets[0].a, b: presets[0].b } : { a: null, b: null }));
-    const update = () => {
-      const has = sel.a != null && sel.b != null, lo = has ? Math.min(sel.a, sel.b) : -1, hi = has ? Math.max(sel.a, sel.b) : -1;
-      $$('#bars .b').forEach(el => { const i = +el.dataset.i, on = i >= lo && i <= hi; el.classList.toggle('sel', on); el.classList.toggle('dim', has && !on); });
-      $$('#mtable tr[data-ri]').forEach(el => { const i = +el.dataset.ri; el.classList.toggle('sel', i >= lo && i <= hi); });
-      $$('[data-pre]').forEach(b => { const pr = presets[+b.dataset.pre]; b.classList.toggle('on', !!pr && has && pr.a === lo && pr.b === hi); });
-      if (!has) { $('#selBox').innerHTML = ''; return; }
-      const pick = series.slice(lo, hi + 1), n = pick.length, sum = pick.reduce((a, x) => a + x.v, 0), avg = sum / n;
-      const vals = pick.map(x => x.v), hasPartial = pick.some(x => x.month === it.partialMonth), shortM = pick.filter(x => covShort(x.month));
-      const cover = avg > 0 && it.stock != null ? it.stock / avg : null, u = esc(it.unit || '');
-      const box = (l, v, h) => `<div><div class="small muted">${l}</div><div class="h num" style="font-weight:700;font-size:21px">${v}</div>${h ? `<div class="small muted">${h}</div>` : ''}</div>`;
-      $('#selBox').innerHTML = `<div style="background:#eaf1f6;border:1px solid #cdddea;border-radius:12px;padding:12px 16px;margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-          <div style="font-weight:600;color:#003049">ช่วงที่เลือก: ${mLabel(pick[0].month)}${n > 1 ? ' – ' + mLabelCov(pick[n - 1].month) : covShort(pick[0].month) ? ` (${covShort(pick[0].month)})` : ''} · ${n} เดือน</div>
-          <div style="display:flex;gap:6px"><button type="button" class="btn small ghost" id="selCopy">⧉ คัดลอกตัวเลข</button><button type="button" class="btn small" id="selPromo">ใช้ค่าเฉลี่ยนี้คำนวณโปรโมชั่น</button></div></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
-          ${box('ยอดใช้รวม', q2(sum), u)}${box('เฉลี่ยต่อเดือน', q2(Math.round(avg * 100) / 100), u + '/เดือน')}
-          ${box('สูงสุด / ต่ำสุด', `${q2(Math.max(...vals))} / ${q2(Math.min(...vals))}`, u)}
-          ${box('สต็อกพอใช้ (อัตรานี้)', cover == null ? '—' : cover.toFixed(1) + ' เดือน', it.stock == null ? 'ไม่มีข้อมูลสต็อก' : `คงเหลือ ${q2(it.stock)} ${u}`)}
-        </div>${shortM.length ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ข้อมูลไม่ครบเดือน: ${shortM.map(x => mLabelCov(x.month)).join(', ')} — ยอดรวมและค่าเฉลี่ยของช่วงนี้จะต่ำกว่าความจริง</div>` : hasPartial ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ช่วงนี้มีเดือน ${mLabel(it.partialMonth)} ซึ่งยังไม่ครบเดือน ค่าเฉลี่ยจะต่ำกว่าความจริง</div>` : ''}</div>`;
-      $('#selPromo').onclick = () => { window.promoPick(S.detail); P.avg = String(Math.round(avg * 100) / 100); location.hash = '#promo'; };
-      $('#selCopy').onclick = async () => {
-        const t = `${sku.name} ${mLabel(pick[0].month)}–${mLabelCov(pick[n - 1].month)} (${n} เดือน)\tรวม ${q2(sum)} ${it.unit || ''}\tเฉลี่ย ${q2(Math.round(avg * 100) / 100)} ${it.unit || ''}/เดือน`;
-        try { await navigator.clipboard.writeText(t); toast('✓ คัดลอกแล้ว'); } catch (e) { toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้'); }
-      };
-    };
-    let drag = false;
-    const bars = $('#bars');
-    bars.addEventListener('pointerdown', e => {
-      const b = e.target.closest('.b'); if (!b) return; const i = +b.dataset.i;
-      if (e.shiftKey && sel.a != null) sel.b = i; else { sel.a = i; sel.b = i; drag = true; }
-      update(); e.preventDefault();
-      try { bars.setPointerCapture(e.pointerId); } catch (er) {}
-    });
-    bars.addEventListener('pointermove', e => {
-      if (!drag) return; const el = document.elementFromPoint(e.clientX, e.clientY); const b = el && el.closest && el.closest('#bars .b');
-      if (b && +b.dataset.i !== sel.b) { sel.b = +b.dataset.i; update(); }
-    });
-    ['pointerup', 'pointercancel'].forEach(ev => bars.addEventListener(ev, () => { drag = false; }));
-    $$('#mtable tr[data-ri]').forEach(tr => tr.onclick = e => { const i = +tr.dataset.ri; if (e.shiftKey && sel.a != null) sel.b = i; else { sel.a = i; sel.b = i; } update(); });
-    $$('[data-pre]').forEach(b => b.onclick = () => { if (b.dataset.pre === 'clear') { sel.a = sel.b = null; } else { const pr = presets[+b.dataset.pre]; sel.a = pr.a; sel.b = pr.b; } update(); });
-    update();
+    const sku = S.skus.find(s => s.code === S.detail), it = computeItem(sku);
+    usageSelBind($('#main'), sku, it, it.series.slice(-24));
   },
 };
+
+/** Monthly usage chart with range selection (drag / Shift+click / quick ranges → total & average). Used on the item page and in expanded overview rows. */
+function usageChartHtml(it, series, compact) {
+  const max = Math.max(1, ...series.map(x => x.v));
+  const years = [...new Set(series.map(x => x.month.slice(0, 4)))];
+  const yColor = y => y === years[years.length - 1] ? '#003049' : '#669BBC';
+  return `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px"><div class="title">ยอดใช้รายเดือน${compact ? ` <span class="small muted" style="font-weight:400">(${series.length} เดือนล่าสุด)</span>` : ''}</div>
+          <div style="display:flex;gap:16px" class="small muted">${years.map(y => `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:${yColor(y)}"></span>ปี ${Number(y) + 543}</span>`).join('')}</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <span class="small muted" style="margin-right:4px">เลือกช่วง:</span>
+          ${VIEWS.overview.presets(series, it).map((pr, k) => `<button type="button" class="pillchip" data-pre="${k}">${pr.label}</button>`).join('')}
+          <button type="button" class="pillchip" data-pre="clear">ล้าง</button>
+        </div>
+        <div class="selBox"></div>
+        <div class="small muted" style="margin:4px 0 10px">กดค้างที่แท่งเดือนแรกแล้วลากไปเดือนสุดท้าย (หรือคลิกเดือนแรก แล้ว Shift+คลิกเดือนสุดท้าย)${compact ? '' : ' — เลือกในตารางด้านล่างได้เหมือนกัน'}</div>
+        <div class="scroll" style="padding-bottom:6px"><div class="bars" style="user-select:none;touch-action:pan-x;${compact ? 'height:150px;min-width:560px' : ''}">${series.map((x, i) => `<div class="b" data-i="${i}" title="${mLabelCov(x.month)}: ${it.firstUse && x.month < it.firstUse ? 'ยังไม่มีสินค้า' : q2(x.v)}"><div class="v">${it.firstUse && x.month < it.firstUse ? '' : q2(x.v)}</div><div class="col" style="height:${(x.v / max * 100).toFixed(1)}%;background:${yColor(x.month.slice(0, 4))};${x.month === it.partialMonth ? 'opacity:.45' : ''}"></div></div>`).join('')}</div>
+        <div class="blabels" style="${compact ? 'min-width:560px' : ''}">${series.map(x => `<div>${mLabel(x.month)}${it.firstUse && x.month < it.firstUse ? '<div style="font-size:9.5px;color:#8a958e;margin-top:2px">ยังไม่มี</div>' : ''}${covShort(x.month) ? `<div style="font-size:9.5px;color:#8a5410;margin-top:2px">${covShort(x.month)}</div>` : ''}</div>`).join('')}</div></div>`;
+}
+function usageSelBind(root, sku, it, series) {
+  if (!root) return;
+  const q = s => root.querySelector(s), qa = s => Array.from(root.querySelectorAll(s));
+  const presets = VIEWS.overview.presets(series, it);
+  const key = sku.code + '|' + series.length, sels = S.ui.sels = S.ui.sels || {};
+  const fi = it.isNew && it.firstUse ? series.findIndex(x => x.month >= it.firstUse) : -1;   // new item: start from its first month
+  const sel = sels[key] || (sels[key] = fi >= 0 ? { a: fi, b: series.length - 1 } : presets[0] ? { a: presets[0].a, b: presets[0].b } : { a: null, b: null });
+  const update = () => {
+    const has = sel.a != null && sel.b != null, lo = has ? Math.min(sel.a, sel.b) : -1, hi = has ? Math.max(sel.a, sel.b) : -1;
+    qa('.bars .b').forEach(el => { const i = +el.dataset.i, on = i >= lo && i <= hi; el.classList.toggle('sel', on); el.classList.toggle('dim', has && !on); });
+    qa('tr[data-ri]').forEach(el => { const i = +el.dataset.ri; el.classList.toggle('sel', i >= lo && i <= hi); });
+    qa('[data-pre]').forEach(b => { const pr = presets[+b.dataset.pre]; b.classList.toggle('on', !!pr && has && pr.a === lo && pr.b === hi); });
+    if (!has) { q('.selBox').innerHTML = ''; return; }
+    const pick = series.slice(lo, hi + 1), n = pick.length, sum = pick.reduce((a, x) => a + x.v, 0), avg = sum / n;
+    const vals = pick.map(x => x.v), hasPartial = pick.some(x => x.month === it.partialMonth), shortM = pick.filter(x => covShort(x.month));
+    const cover = avg > 0 && it.stock != null ? it.stock / avg : null, u = esc(it.unit || '');
+    const box = (l, v, h) => `<div><div class="small muted">${l}</div><div class="h num" style="font-weight:700;font-size:21px">${v}</div>${h ? `<div class="small muted">${h}</div>` : ''}</div>`;
+    q('.selBox').innerHTML = `<div style="background:#eaf1f6;border:1px solid #cdddea;border-radius:12px;padding:12px 16px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <div style="font-weight:600;color:#003049">ช่วงที่เลือก: ${mLabel(pick[0].month)}${n > 1 ? ' – ' + mLabelCov(pick[n - 1].month) : covShort(pick[0].month) ? ` (${covShort(pick[0].month)})` : ''} · ${n} เดือน</div>
+        <div style="display:flex;gap:6px"><button type="button" class="btn small ghost selCopy">⧉ คัดลอกตัวเลข</button><button type="button" class="btn small selPromo">ใช้ค่าเฉลี่ยนี้คำนวณโปรโมชั่น</button></div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+        ${box('ยอดใช้รวม', q2(sum), u)}${box('เฉลี่ยต่อเดือน', q2(Math.round(avg * 100) / 100), u + '/เดือน')}
+        ${box('สูงสุด / ต่ำสุด', `${q2(Math.max(...vals))} / ${q2(Math.min(...vals))}`, u)}
+        ${box('สต็อกพอใช้ (อัตรานี้)', cover == null ? '—' : cover.toFixed(1) + ' เดือน', it.stock == null ? 'ไม่มีข้อมูลสต็อก' : `คงเหลือ ${q2(it.stock)} ${u}`)}
+      </div>${shortM.length ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ข้อมูลไม่ครบเดือน: ${shortM.map(x => mLabelCov(x.month)).join(', ')} — ยอดรวมและค่าเฉลี่ยของช่วงนี้จะต่ำกว่าความจริง</div>` : hasPartial ? `<div class="small" style="color:#8a5410;margin-top:8px">⚠ ช่วงนี้มีเดือน ${mLabel(it.partialMonth)} ซึ่งยังไม่ครบเดือน ค่าเฉลี่ยจะต่ำกว่าความจริง</div>` : ''}</div>`;
+    q('.selPromo').onclick = () => { window.promoPick(sku.code); P.avg = String(Math.round(avg * 100) / 100); location.hash = '#promo'; };
+    q('.selCopy').onclick = async () => {
+      const t = `${sku.name} ${mLabel(pick[0].month)}–${mLabelCov(pick[n - 1].month)} (${n} เดือน)\tรวม ${q2(sum)} ${it.unit || ''}\tเฉลี่ย ${q2(Math.round(avg * 100) / 100)} ${it.unit || ''}/เดือน`;
+      try { await navigator.clipboard.writeText(t); toast('✓ คัดลอกแล้ว'); } catch (e) { toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้'); }
+    };
+  };
+  let drag = false;
+  const bars = q('.bars');
+  bars.addEventListener('pointerdown', e => {
+    const b = e.target.closest('.b'); if (!b) return; const i = +b.dataset.i;
+    if (e.shiftKey && sel.a != null) sel.b = i; else { sel.a = i; sel.b = i; drag = true; }
+    update(); e.preventDefault();
+    try { bars.setPointerCapture(e.pointerId); } catch (er) {}
+  });
+  bars.addEventListener('pointermove', e => {
+    if (!drag) return; const el = document.elementFromPoint(e.clientX, e.clientY); const b = el && el.closest && el.closest('.b');
+    if (b && bars.contains(b) && +b.dataset.i !== sel.b) { sel.b = +b.dataset.i; update(); }
+  });
+  ['pointerup', 'pointercancel'].forEach(ev => bars.addEventListener(ev, () => { drag = false; }));
+  qa('tr[data-ri]').forEach(tr => tr.onclick = e => { const i = +tr.dataset.ri; if (e.shiftKey && sel.a != null) sel.b = i; else { sel.a = i; sel.b = i; } update(); });
+  qa('[data-pre]').forEach(b => b.onclick = () => { if (b.dataset.pre === 'clear') { sel.a = sel.b = null; } else { const pr = presets[+b.dataset.pre]; sel.a = pr.a; sel.b = pr.b; } update(); });
+  update();
+}
 
 /* ---------- new item: choose which usage rate to use ---------- */
 function newItemBox(it) {
@@ -370,4 +393,36 @@ function healthBind() {
       S.skus.forEach(s => { if (codes.includes(s.code)) s.is_tracked = false; }); closeModal(); toast(`✓ ปิดการติดตาม ${codes.length} รายการแล้ว`); render();
     };
   };
+}
+
+/* ---------- expandable overview rows ---------- */
+const OPEN = new Set();
+(function () {
+  const st = document.createElement('style');
+  st.textContent = '.xbtn{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;background:#edf1ec;color:#46524c;font-size:11px;transition:transform .15s}'
+    + 'tr.xopen .xbtn{transform:rotate(90deg);background:#003049;color:#fff}tr.xopen>td{background:#f4f8fb}'
+    + 'tr.xdetail>td{background:#f4f8fb;padding:4px 20px 18px!important;border-top:none;cursor:default}'
+    + '.xgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:16px;align-items:start}@media(max-width:900px){.xgrid{grid-template-columns:1fr}}'
+    + '.xkv{display:grid;grid-template-columns:1fr 1fr;gap:8px}.xkv>div{background:#fff;border:1px solid #e2e8e1;border-radius:10px;padding:8px 11px}'
+    + '.xkv .k{font-size:11.5px;color:#5f6b64}.xkv .v{font-family:Anuphan,"IBM Plex Sans Thai",sans-serif;font-weight:700;font-size:17px}'
+    + '.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}';
+  document.head.appendChild(st);
+})();
+function expandHtml(x) {
+  const series = x.series.slice(-13), u = esc(x.unit || 'หน่วย');
+  const done = series.filter(m => m.month !== x.partialMonth && !(x.firstUse && m.month < x.firstUse)).map(m => m.v);
+  const ref = typeof promoRef === 'function' ? promoRef(x.code).last : null;
+  const kv = (k, v, h) => `<div><div class="k">${k}</div><div class="v">${v}</div>${h ? `<div class="small muted">${h}</div>` : ''}</div>`;
+  return `<div class="xgrid">
+    <div class="card pad" style="padding:14px 16px;min-width:0">${usageChartHtml(x, series, true)}</div>
+    <div><div class="xkv">
+      ${x.isNew ? kv('อัตราที่ใช้คำนวณ', q2(Math.round(x.avg3 * 100) / 100), `${u}/เดือน · ${esc(x.nw.text)}`) : kv('เฉลี่ย 3 เดือน', q2(Math.round(x.avg3 * 100) / 100), u + '/เดือน')}
+      ${x.isNew ? kv('เฉลี่ย 3 เดือน (ปกติ)', q2(Math.round(x.avg3raw * 100) / 100), 'นับเดือนก่อนเริ่มใช้เป็น 0') : kv('เฉลี่ย 6 เดือน', q2(Math.round(x.avg6 * 100) / 100), u + '/เดือน')}
+      ${kv('สูงสุด / ต่ำสุด', done.length ? `${q2(Math.max(...done))} / ${q2(Math.min(...done))}` : '—', `${done.length} เดือนเต็มล่าสุด`)}
+      ${kv('ราคาที่ได้ล่าสุด', ref ? fmt(Number(ref.chosen_cpu), 2) : '—', ref ? `บาท/${u} · ${shortD(ref.decided_on)}` : 'ยังไม่มีบันทึกโปร')}
+      ${kv('คงเหลือ', x.stock == null ? '—' : q2(x.stock), x.stockAsOf ? 'ณ ' + dLabel(x.stockAsOf) : '')}
+      ${kv('บริษัท', `<span style="font-size:13px;font-weight:500;font-family:inherit">${esc(x.supplier || '—')}</span>`, '')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button type="button" class="btn small" data-xpromo>🏷 คำนวณโปร</button><button type="button" class="btn ghost small" data-xfull>เปิดหน้าเต็ม →</button></div></div>
+  </div>`;
 }
