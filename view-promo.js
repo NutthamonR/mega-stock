@@ -112,7 +112,7 @@ VIEWS.promo = {
     const r = promoCalc();
     const opts = S.skus.filter(s => s.is_tracked).sort((a, b) => a.name.localeCompare(b.name));
     const unitL = esc(r.unit), packL = esc(r.pack);
-    const avgChips = r.it ? [['avg3', 'เฉลี่ย 3 ด.', r.it.avg3], ['avg6', 'เฉลี่ย 6 ด.', r.it.avg6]].map(([k, l, v]) =>
+    const avgChips = r.it ? (r.it.isNew ? [['rate', 'สินค้าใหม่ · ' + NEW_MODES[r.it.nw.mode], r.it.avg3], ['avg3', 'เฉลี่ย 3 ด. (ปกติ)', r.it.avg3raw]] : [['avg3', 'เฉลี่ย 3 ด.', r.it.avg3], ['avg6', 'เฉลี่ย 6 ด.', r.it.avg6]]).map(([k, l, v]) =>
       `<button type="button" class="chip ${Math.abs(num(P.avg) - Math.round(v * 100) / 100) < 1e-9 ? 'on' : ''}" data-avg="${Math.round(v * 100) / 100}" style="padding:5px 11px;font-size:12px">${l} = ${q2(v)}</button>`).join('') : '';
     const nHist = PH.list ? PH.list.length : 0;
     return `<div class="pagehead"><div><h1>คำนวณสั่งซื้อตามโปรโมชั่น</h1><div class="sub">เทียบหลายตัวเลือก — ต้นทุนต่อหน่วย, สต็อกพอใช้กี่เดือน และราคาเทียบ PO ล่าสุด · เลือกตัวที่จะสั่งแล้วบันทึกไว้อ้างอิงรอบถัดไป</div></div>
