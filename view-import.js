@@ -208,7 +208,8 @@ function previewOnhand(p, matched, unmatched) {
   return `<div class="small muted" style="margin-bottom:14px">รายงานยอดยาคงคลัง <b>${esc(p.fileName)}</b> · ${p.branches.length} สาขา/คลัง (${p.branches.map(esc).join(', ')}) · รวมยอดทุกล็อตทุกสาขาเป็นยอดเดียวต่อ SKU</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
       <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px;color:#1f7a55">${matched.length}</div><div class="h2">SKU ที่จับคู่ได้</div></div>
-      <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px">${unmatched.length}</div><div class="h2">รายการอื่นที่ไม่ได้ติดตาม (ข้าม)</div></div>
+      <div class="kpi" style="padding:12px 14px;${unmatched.length ? 'border-color:#e0982b' : ''}"><div class="v" style="font-size:22px;${unmatched.length ? 'color:#8a5410' : ''}">${IGN.set ? unmatched.length : '…'}</div><div class="h2">รหัสใหม่ที่ยังไม่รู้จัก</div></div>
+      <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px">${IMP.nIgn || 0}</div><div class="h2">ตั้งไว้ว่าไม่ต้องติดตาม (ข้าม)</div></div>
       <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px">${missing.length}</div><div class="h2">SKU ที่ติดตามแต่ไม่มีในรายงาน</div></div>
     </div>
     <div class="field"><span class="lbl" style="display:block">ใช้ยอดคงคลังคอลัมน์ไหน</span>
@@ -226,8 +227,7 @@ function previewOnhand(p, matched, unmatched) {
       <div style="max-height:320px;overflow:auto;margin-top:8px"><table class="t"><thead><tr><th>รหัส</th><th>ชื่อ</th><th class="r">ยอดรวม</th><th>หน่วย</th><th class="r">ล็อต</th></tr></thead><tbody>
       ${matched.map(i => { const q = (ui.col === 'dated' ? i.dated : i.now) - (ui.noExp ? (ui.col === 'dated' ? i.expDated : i.expNow) : 0); return `<tr><td>${esc(i.code)}</td><td>${esc(i.name)}</td><td class="r">${q2(q)}</td><td>${esc(i.unit)}</td><td class="r">${i.lots}</td></tr>`; }).join('')}
       </tbody></table></div></details>
-    ${unmatched.length ? `<details style="margin-bottom:12px"><summary class="small muted" style="cursor:pointer">รายการที่ไม่ได้ติดตาม ${unmatched.length} รายการ (จะไม่ถูกนำเข้า — ถ้าต้องการติดตาม ให้เพิ่มในหน้ารายการหลักก่อน)</summary>
-      <div class="small muted" style="margin-top:6px;line-height:1.7">${unmatched.map(i => `${esc(i.code)} ${esc(i.name)}`).join(' · ')}</div></details>` : ''}`;
+    ${unknownPanel(p, unmatched)}`;
 }
 
 function movementTotals(p) {
@@ -251,7 +251,8 @@ function previewMovement(p, matched, unmatched) {
     <div class="info" style="font-size:12.5px">🔒 ไฟล์นี้มีชื่อผู้ป่วย — เว็บอ่านไฟล์ในเครื่องของคุณ และบันทึกเฉพาะ <b>ยอดใช้รวมต่อ SKU ต่อวัน</b> ไม่ได้ส่งชื่อผู้ป่วยหรือรายละเอียดรายการขึ้นระบบ</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
       <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px;color:#1f7a55">${matched.length}</div><div class="h2">SKU ที่จับคู่ได้</div></div>
-      <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px">${unmatched.length}</div><div class="h2">รายการอื่นที่ไม่ได้ติดตาม (ข้าม)</div></div>
+      <div class="kpi" style="padding:12px 14px;${unmatched.length ? 'border-color:#e0982b' : ''}"><div class="v" style="font-size:22px;${unmatched.length ? 'color:#8a5410' : ''}">${IGN.set ? unmatched.length : '…'}</div><div class="h2">รหัสใหม่ที่ยังไม่รู้จัก</div></div>
+      <div class="kpi" style="padding:12px 14px"><div class="v" style="font-size:22px">${IMP.nIgn || 0}</div><div class="h2">ตั้งไว้ว่าไม่ต้องติดตาม (ข้าม)</div></div>
     </div>
     <div class="field"><span class="lbl" style="display:block">นับเป็นยอดใช้</span>
       ${p.types.map(t => `<label class="lbl" style="font-weight:400"><input type="checkbox" data-mvt="${esc(t.type)}" ${ui.types[t.type] ? 'checked' : ''}> ${esc(t.type)} <span class="muted">(${fmt(t.n)} รายการ)</span></label>`).join('')}</div>
@@ -261,8 +262,7 @@ function previewMovement(p, matched, unmatched) {
     <details style="margin-bottom:12px"><summary class="small" style="cursor:pointer">ดูยอดใช้รวมในช่วงนี้ (${tot.length} รายการ)</summary>
       <div style="max-height:320px;overflow:auto;margin-top:8px"><table class="t"><thead><tr><th>รหัส</th><th>ชื่อ</th><th class="r">ยอดใช้รวม</th><th>หน่วย</th></tr></thead><tbody>
       ${tot.map(i => `<tr><td>${esc(i.code)}</td><td>${esc(i.name)}</td><td class="r">${q2(i.total)}</td><td>${esc(i.unit)}</td></tr>`).join('')}</tbody></table></div></details>
-    ${unmatched.length ? `<details style="margin-bottom:12px"><summary class="small muted" style="cursor:pointer">รายการที่ไม่ได้ติดตาม ${unmatched.length} รายการ (จะไม่ถูกนำเข้า)</summary>
-      <div class="small muted" style="margin-top:6px;line-height:1.7">${unmatched.map(i => `${esc(i.code)} ${esc(i.name)}`).join(' · ')}</div></details>` : ''}`;
+    ${unknownPanel(p, unmatched)}`;
 }
 
 VIEWS.import = {
@@ -272,7 +272,9 @@ VIEWS.import = {
     if (p) {
       const known = new Set(S.skus.map(s => s.code));
       const matched = p.items.filter(i => known.has(i.code)), unmatched = p.items.filter(i => !known.has(i.code));
-      const body = p.kind === 'plan' ? previewPlan(p, matched, unmatched) : p.kind === 'onhand' ? previewOnhand(p, matched, unmatched) : previewMovement(p, matched, unmatched);
+      const unknown = p.kind === 'plan' ? unmatched : unmatched.filter(i => !(IGN.set && IGN.set.has(i.code)));
+      IMP.nIgn = unmatched.length - unknown.length;
+      const body = p.kind === 'plan' ? previewPlan(p, matched, unmatched) : p.kind === 'onhand' ? previewOnhand(p, matched, unknown) : previewMovement(p, matched, unknown);
       preview = `<div class="card pad" style="margin-top:16px"><div class="title" style="margin-bottom:12px">ตรวจสอบก่อนนำเข้า</div>${body}
         ${IMP.err ? `<div class="err">${esc(IMP.err)}</div>` : ''}
         <div class="actions"><button class="btn ghost" id="impReset">เลือกไฟล์ใหม่</button><button class="btn" id="impGo" ${IMP.busy || !matched.length ? 'disabled' : ''}>${IMP.busy ? 'กำลังนำเข้า…' : `ยืนยันนำเข้า ${matched.length} รายการ`}</button></div>
@@ -294,9 +296,14 @@ VIEWS.import = {
   },
   bind() {
     if (!S.imports && !IMP.loadingImports) { IMP.loadingImports = true; loadImports().then(render).catch(() => {}).finally(() => { IMP.loadingImports = false; }); }
+    if (!IGN.set && !IGN.loading) loadIgnored();
+    $$('[data-trk]').forEach(b => b.onclick = () => unkTrack(b.dataset.trk, b));
+    $$('[data-ign]').forEach(b => b.onclick = () => unkIgnore([b.dataset.ign], b));
+    const ia = $('#ignAll'); if (ia) ia.onclick = () => { if (!ia.dataset.sure) { ia.dataset.sure = '1'; ia.textContent = 'ยืนยัน — ไม่ต้องติดตามทั้งหมดในรายการนี้'; return; } unkIgnore(currentUnknown().map(i => i.code), ia); };
+    const um = $('#unkMore'); if (um) um.onclick = () => { IMP.unkAll = true; render(); };
     $('#impFile').onchange = async e => {
       const f = e.target.files[0]; if (!f) return;
-      Object.assign(IMP, { file: f.name, err: null, done: null, parsed: null, oh: null, mv: null });
+      Object.assign(IMP, { file: f.name, err: null, done: null, parsed: null, oh: null, mv: null, unkAll: false });
       try { IMP.parsed = await parseFile(f); } catch (er) { IMP.err = er.message || String(er); }
       e.target.value = '';
       render();
@@ -309,6 +316,57 @@ VIEWS.import = {
     const go = $('#impGo'); if (go) go.onclick = () => runImport();
   },
 };
+
+/* ---------- codes in a report that are not in the SKU list: track them, or mark "not tracked" so they are not asked again ---------- */
+const IGN = { set: null, loading: false };
+async function loadIgnored() {
+  IGN.loading = true;
+  const out = [];
+  for (let f = 0; ; f += 1000) { const { data, error } = await sb.from('stock_ignored_codes').select('code').range(f, f + 999); if (error) { IGN.loading = false; IGN.set = new Set(); return render(); } out.push(...data); if (data.length < 1000) break; }
+  IGN.set = new Set(out.map(r => r.code)); IGN.loading = false; render();
+}
+function currentUnknown() {
+  const p = IMP.parsed; if (!p || !IGN.set) return [];
+  const known = new Set(S.skus.map(s => s.code));
+  return p.items.filter(i => !known.has(i.code) && !IGN.set.has(i.code));
+}
+function unknownPanel(p, list) {
+  if (!IGN.set) return '<div class="small muted" style="margin-bottom:12px">กำลังตรวจรหัสที่ยังไม่รู้จัก…</div>';
+  if (!list.length) return `<div class="small" style="margin-bottom:12px;color:#1f7a55">✓ ไม่มีรหัสใหม่ในไฟล์นี้${IMP.nIgn ? ` (ข้ามรหัสที่ตั้งไว้ว่าไม่ต้องติดตาม ${IMP.nIgn} รหัส)` : ''}</div>`;
+  const mv = p.kind === 'movement';
+  const val = i => mv ? Object.values(i.cells).reduce((a, b) => a + b, 0) : (IMP.oh && IMP.oh.col === 'now' ? i.now : i.dated);
+  const rows = list.map(i => ({ i, v: val(i) })).sort((a, b) => b.v - a.v);
+  const show = IMP.unkAll ? rows : rows.slice(0, 10);
+  return `<div style="border:1px solid #f1dcb3;background:#fffaf0;border-radius:13px;padding:14px 16px;margin-bottom:14px">
+    <div style="font-weight:600;color:#8a5410;margin-bottom:4px">⚠ พบรหัสที่ยังไม่อยู่ในรายการหลัก ${list.length} รหัส — เป็นสินค้าที่ต้องติดตามไหม?</div>
+    <div class="small muted" style="margin-bottom:10px">เรียงจาก${mv ? 'ยอดใช้' : 'ยอดคงคลัง'}มากไปน้อย · “+ ติดตาม” = เพิ่มเป็น SKU (ข้อมูลของรหัสนี้ในไฟล์จะถูกนำเข้าด้วย) · “ไม่ต้องติดตาม” = จะไม่ถามอีก · ยังไม่ตอบก็นำเข้าต่อได้ ระบบจะถามใหม่ครั้งหน้า</div>
+    <div class="scroll"><table class="t" style="background:#fff;min-width:560px"><thead><tr><th>รหัส</th><th>ชื่อในรายงาน</th><th class="r">${mv ? 'ยอดใช้ในไฟล์' : 'ยอดคงคลัง'}</th><th class="r">จัดการ</th></tr></thead><tbody>
+    ${show.map(({ i, v }) => `<tr><td>${esc(i.code)}</td><td>${esc(i.name)}</td><td class="r" style="white-space:nowrap">${q2(Math.round(v * 100) / 100)} ${esc(i.unit)}</td>
+      <td class="r" style="white-space:nowrap"><button type="button" class="btn small" data-trk="${esc(i.code)}">+ ติดตาม</button> <button type="button" class="btn ghost small" data-ign="${esc(i.code)}">ไม่ต้องติดตาม</button></td></tr>`).join('')}
+    ${rows.length > show.length ? `<tr><td colspan="4" class="small muted" style="text-align:center">… อีก ${rows.length - show.length} รหัส · <button type="button" class="linkbtn" id="unkMore">แสดงทั้งหมด</button></td></tr>` : ''}
+    </tbody></table></div>
+    <div style="margin-top:10px"><button type="button" class="btn ghost small" id="ignAll">ไม่ต้องติดตามทั้ง ${list.length} รหัสนี้</button></div>
+  </div>`;
+}
+async function unkTrack(code, btn) {
+  const it = IMP.parsed && IMP.parsed.items.find(i => i.code === code); if (!it) return;
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.from('stock_skus').insert({ code, name: it.name || code, stock_unit: it.unit || null, is_tracked: true }).select().single();
+  if (error) { if (btn) btn.disabled = false; return toast(errMsg(error)); }
+  S.skus.push(data); S.skus.sort((a, b) => a.code.localeCompare(b.code));
+  toast(`✓ เพิ่ม ${code} เป็น SKU แล้ว — เติมหน่วยซื้อ/บริษัทได้ที่หน้ารายการหลัก`); render();
+}
+async function unkIgnore(codes, btn) {
+  if (!codes.length) return;
+  const items = new Map((IMP.parsed ? IMP.parsed.items : []).map(i => [i.code, i]));
+  if (btn) btn.disabled = true;
+  const rows = codes.map(c => ({ code: c, name: (items.get(c) || {}).name || null, unit: (items.get(c) || {}).unit || null }));
+  for (let k = 0; k < rows.length; k += 500) {
+    const { error } = await sb.from('stock_ignored_codes').upsert(rows.slice(k, k + 500), { onConflict: 'code', ignoreDuplicates: true });
+    if (error) { if (btn) btn.disabled = false; return toast(errMsg(error)); }
+  }
+  codes.forEach(c => IGN.set.add(c)); toast(codes.length > 1 ? `✓ ตั้ง ${codes.length} รหัสเป็น “ไม่ต้องติดตาม” แล้ว` : `✓ ${codes[0]} — ไม่ต้องติดตาม`); render();
+}
 
 function coverageCard() {
   const months = Object.keys(S.coverage || {}).sort().slice(-6).reverse();
